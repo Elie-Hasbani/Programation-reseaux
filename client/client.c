@@ -29,11 +29,40 @@ static void app(const char *address, const char *name)
 {
    SOCKET sock = init_connection(address);
    char buffer[BUF_SIZE];
+   //demander pseudo a l'utilisateur
+   printf("entrer votre pseudo: ");
+   fgets(buffer, BUF_SIZE - 1, stdin);
+   buffer[strcspn(buffer, "\n")] = '\0';
+   
 
    fd_set rdfs;
 
    /* send our name */
-   write_server(sock, name);
+   write_server(sock, buffer);
+   int n = 0;//read_server(sock, buffer);
+
+   read_server(sock, buffer);
+   printf("%s",buffer);
+   fflush(stdout);
+   while(strcmp(buffer,"code100")){
+      printf("pseudo deja utilisé, mettre un autre: ");
+      fgets(buffer, BUF_SIZE - 1, stdin);
+      buffer[strcspn(buffer, "\n")] = '\0';
+      write_server(sock, buffer);
+
+      read_server(sock, buffer);
+      fflush(stdout);
+
+
+
+   }
+   printf("inscription réussie");
+   fflush(stdout);
+
+
+   
+
+
 
    while(1)
    {

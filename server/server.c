@@ -35,6 +35,8 @@ static void app(void)
    int max = sock;
    /* an array for all clients */
    Client clients[MAX_CLIENTS];
+   Client clients_not_loged_in[MAX_CLIENTS/2];
+   int actual_not_loged;
 
    fd_set rdfs;
 
@@ -55,11 +57,19 @@ static void app(void)
          FD_SET(clients[i].sock, &rdfs);
       }
 
+      for(i = 0; i < actual_not_loged; i++)
+      {
+         FD_SET(clients_not_loged_in[i].sock, &rdfs);
+      }
+
       if(select(max + 1, &rdfs, NULL, NULL, NULL) == -1)
       {
          perror("select()");
          exit(errno);
       }
+
+      ///check if not loged in client sent new pseudo
+  
 
       /* something from standard input : i.e keyboard */
       if(FD_ISSET(STDIN_FILENO, &rdfs))
@@ -86,6 +96,8 @@ static void app(void)
             continue;
          }
 
+
+
          /* what is the new maximum fd ? */
          max = csock > max ? csock : max;
 
@@ -93,8 +105,34 @@ static void app(void)
 
          Client c = { csock };
          strncpy(c.name, buffer, BUF_SIZE - 1);
-         clients[actual] = c;
-         actual++;
+
+         int exists = 0;
+         //check if pseudo is already used
+         for(int i=0; i<actual;++i){
+            if(!strcmp(buffer,clients[i].name)){
+               printf("pseudo recieved already in use\n");
+               fflush(stdout);
+               char * message = "code700";
+               write_client(c.sock, message);
+               clients_not_loged_in[actual_not_loged] = c;
+               actual_not_loged++;
+               exists = 1;
+               break;
+            }
+         }
+
+         if(exists == 0){
+            char * message = "code100";
+            printf("client inscrit\n");
+            write_client(c.sock, message);
+
+            fflush(stdout);
+            clients[actual] = c;
+            actual++;
+         }
+
+
+
       }
       else
       {
@@ -117,7 +155,9 @@ static void app(void)
                }
                else
                {
-                  send_message_to_all_clients(clients, client, actual, buffer, 0);
+                  read_and_handle_message(clients, client, actual, buffer, 0);
+                  //send_message_to_all_clients(clients, client, actual, buffer, 0);
+                  fflush(stdout);
                }
                break;
             }
@@ -127,6 +167,50 @@ static void app(void)
 
    clear_clients(clients, actual);
    end_connection(sock);
+}
+
+
+static void read_and_handle_message(Client *clients, Client sender, int actual, const char *buffer, char from_server){
+
+   /*char* dest;
+   const char *space = strchr(buffer, ' ');  // trouve le premier espace
+   size_t len = (space) ? (size_t)(space - buffer) : strlen(buffer);
+   strncpy(dest, buffer, len);
+   dest[len] = '\0';*/
+
+   if(!strcmp(buffer, "1")){
+      printf("sending player list\n");
+      send_player_list(actual,sender,clients);
+   }else if(strstr(buffer, "challenge")){
+      printf("user wants to challenge");
+
+      const char *nom = strchr(buffer, ' ');  // trouve le premier espace
+      printf(nom);
+      //challenge(int actual);
+      
+   } 
+   else{
+      printf("no match\n");
+      send_message_to_all_clients(clients, sender, actual, buffer, 0);
+   }
+}
+
+static void challenge(Client sender, Client clients, int actual, char* name);
+
+static void send_player_list(int actual,Client sender,Client *clients){
+   int i = 0;
+   char message[BUF_SIZE];
+   message[0] = 0;
+   for(i = 0; i < actual; i++)
+   {
+      strncat(message, clients[i].name, sizeof message - strlen(message) - 1);
+      if(i!= actual-1){
+         strncat(message, "\n", sizeof message - strlen(message) - 1);
+      }
+
+   }
+   write_client(sender.sock, message);   
+
 }
 
 static void clear_clients(Client *clients, int actual)
@@ -226,6 +310,9 @@ static void write_client(SOCKET sock, const char *buffer)
       exit(errno);
    }
 }
+
+
+
 
 int main(int argc, char **argv)
 {

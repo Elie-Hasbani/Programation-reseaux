@@ -46,4 +46,7 @@ static void send_message_to_all_clients(Client *clients, Client client, int actu
 static void remove_client(Client *clients, int to_remove, int *actual);
 static void clear_clients(Client *clients, int actual);
 
+static void read_and_handle_message(Client *clients, Client client, int actual, const char *buffer, char from_server);
+static void send_player_list(int actual,Client sender,Client *clients);
+static void challenge(Client sender, Client clients, int actual, char* name);
 #endif /* guard */
