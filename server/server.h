@@ -1,11 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#ifdef WIN32
 
-#include <winsock2.h>
-
-#elif defined (linux)
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -22,11 +18,7 @@ typedef struct sockaddr SOCKADDR;
 typedef struct in_addr IN_ADDR;
 
 
-#else
 
-#error not defined for this platform
-
-#endif
 
 #define CRLF        "\r\n"
 #define PORT         9999
@@ -37,6 +29,12 @@ typedef struct in_addr IN_ADDR;
 #include "client.h"
 
 typedef struct {Client pair[2]} Challenge;
+typedef struct {
+    Client pair[2];
+    Client spectators[5];
+    int nb_spectators;
+    char grid[100]; ///////to chnage into the real awale game!!!!!!!!!!/////////////////////////////    
+}Match;
 
 
 static void init(void);
@@ -54,5 +52,7 @@ static void read_and_handle_message(Client *clients, Client client, int actual, 
 static void send_player_list(int actual,Client sender,Client *clients);
 static void challenge(Client sender, Client *clients, int actual, char* name,Challenge ** challenges);
 static void respond_to_challenge(Client sender, Challenge ** challenges, const char * buffer);
-static void login_waiting_clients(Client * clients_not_loged_in, int actual_not_loged_in);
+static void create_match(Challenge * challenge);
+static void play_move(Client sender, const char *buffer);
+static void spectate_match(Client sender, const char *buffer);
 #endif /* guard */
