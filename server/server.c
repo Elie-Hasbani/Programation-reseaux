@@ -152,7 +152,8 @@ static void app(void)
                if(c == 0)
                {
                   closesocket(clients[i].sock);
-                  remove_client(clients, i, &actual);
+                  clients[i].state = -1;
+                  //remove_client(clients, i, &actual);
                   strncpy(buffer, client.name, BUF_SIZE - 1);
                   strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
                   send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
@@ -371,8 +372,26 @@ static void play_move(Client * sender, const char *buffer){
    fflush(stdout);
    for(int i = 0; i<match_actual; ++i){
       if(!strcmp((*sender).name, matches[i]->pair[0]->name) && !strcmp(nom, matches[i]->pair[1]->name)){
+         if(sender->state == -1 && matches[i]->pair[1]->state == -1){
+            return;
+         }
+         else if(sender->state == -1 && matches[i]->pair[1]->state != -1){
+            char message[50];
+            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
+            write_client(matches[i]->pair[1]->sock, message);
+            return;
+         }
+         else if(sender->state != -1 && matches[i]->pair[1]->state == -1){
+            char message[50];
+            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
+            write_client(sender->sock, message);
+            return;
+         }
+
+         
          strcpy(matches[i]->grid, move); ///to change
          send_game_update(sender, i, move, nom,1);
+
 
          return;
          
@@ -394,7 +413,6 @@ static void play_move(Client * sender, const char *buffer){
 
 
 static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
-
    char message[100];      
    snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
    write_client(matches[i]->pair[index]->sock, message);
@@ -422,7 +440,7 @@ static void send_game_update(Client * sender, int i, char * move, char* nom, int
 
 static void challenge(Client * sender, Client *clients, int actual, char* name, Challenge ** challenges,const char * buffer){
    if(!strcmp(name, (*sender).name)){
-      write_client((*sender).sock, "can't challenge yourself!");
+      write_client((*sender).sock, "can't challenge yourself!"); 
       return;
    }
    int private_game = 0;
