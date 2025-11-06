@@ -38,21 +38,39 @@ static void init_game(game_t *g) {
     g->history_len=0;
 }
 
+
 static void ascii_board(game_t *g, char *out, size_t out_sz) {
     char top[256]="", bottom[256]="", tmp[64];
-    for (int i=11;i>=6;--i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(top,tmp,sizeof(top)-strlen(top)-1); }
-    for (int i=0;i<=5;++i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(bottom,tmp,sizeof(bottom)-strlen(bottom)-1); }
-    snprintf(out,out_sz,
+
+    for (int i = 0; i <= 5; ++i) {
+        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
+        strncat(top, tmp, sizeof(top) - strlen(top) - 1);
+    }
+
+    for (int i = 6; i <= 11; ++i) {
+        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
+        strncat(bottom, tmp, sizeof(bottom) - strlen(bottom) - 1);
+    }
+
+    snprintf(out, out_sz,
         "  +--------------------------------------\n"
-        "  |  %s |  <- Player 2 (pits 11..6)\n"
-        "P2 captures: %2d\n"
+        "  |  %s |  <- %s (pits 0..5)\n"
+        "%s captures: %2d\n"
         "  |--------------------------------------|\n"
-        "  |  %s |  <- Player 1 (pits 0..5)\n"
-        "P1 captures: %2d\n"
+        "  |  %s |  <- %s (pits 6..11)\n"
+        "%s captures: %2d\n"
         "  +--------------------------------------+\n"
-        "  Turn: Player %d | Phase: %s\n",
-        top,g->captured[1],bottom,g->captured[0],g->turn,g->phase==0?"playing":"finished");
+        "  Turn: %s | Phase: %s\n",
+        top, g->player[0]->name,
+        g->player[0]->name, g->captured[0],
+        bottom, g->player[1]->name,
+        g->player[1]->name, g->captured[1],
+        g->player[g->turn]->name,
+        g->phase == 0 ? "playing" : "finished"
+    );
 }
+
+
 
 static int simulate_move_board(const int in_board[12], int player, int pit, int out_board[12], int *last_pos) {
     memcpy(out_board,in_board,12*sizeof(int));
