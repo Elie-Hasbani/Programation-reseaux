@@ -371,43 +371,12 @@ static void play_move(Client * sender, const char *buffer){
    fflush(stdout);
    for(int i = 0; i<match_actual; ++i){
       if(!strcmp((*sender).name, matches[i]->pair[0]->name) && !strcmp(nom, matches[i]->pair[1]->name)){
-         /*strcpy(matches[i]->grid, move); ///to change
-
-         char message[100];      
-         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
-         write_client(matches[i]->pair[1]->sock, message);
-         char message2[100]; 
-         snprintf(message2, sizeof(message2), "new state of grid is now: %s\n",matches[i]->grid);
-         write_client(matches[i]->pair[1]->sock, message2);
-         write_client(matches[i]->pair[0]->sock, message2);
-
-         for(int j = 0; j<matches[i]->nb_spectators; ++j){
-            char message[100];      
-            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",(*sender).name, nom ,move);
-            write_client(matches[i]->spectators[j]->sock, message);
-            write_client(matches[i]->spectators[j]->sock, message2);
-         }*/
          strcpy(matches[i]->grid, move); ///to change
          send_game_update(sender, i, move, nom,1);
 
          return;
          
       }else if(!strcmp((*sender).name, matches[i]->pair[1]->name) && !strcmp(nom, matches[i]->pair[0]->name)){
-         /*strcpy(matches[i]->grid, move); ///to change
-         char message[100];      
-         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
-         write_client(matches[i]->pair[0]->sock, message);
-         char message2[100]; 
-         snprintf(message2, sizeof(message2), "new state of grid is now: %s\n",matches[i]->grid);
-         write_client(matches[i]->pair[1]->sock, message2);
-         write_client(matches[i]->pair[0]->sock, message2);
-
-         for(int j = 0; j<matches[i]->nb_spectators; ++j){
-            char message[100];      
-            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",(*sender).name, nom ,move);
-            write_client(matches[i]->spectators[j]->sock, message);
-            write_client(matches[i]->spectators[j]->sock, message2);
-         }*/
          strcpy(matches[i]->grid, move); ///to change
          send_game_update(sender, i, move, nom,0);
          return;
@@ -427,7 +396,7 @@ static void play_move(Client * sender, const char *buffer){
 static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
 
    char message[100];      
-   snprintf(message, sizeof(message), "move played in match with %s is: %s",(*sender).name, move);
+   snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
    write_client(matches[i]->pair[index]->sock, message);
    char message2[100]; 
    snprintf(message2, sizeof(message2), "new state of grid is now: %s",matches[i]->grid);
