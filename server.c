@@ -395,8 +395,6 @@ static void spectate_match(Client * sender, const char *buffer){
 }
 
 
-
-
 static void respond_to_challenge(Client * sender, Challenge ** challenges, const char * buffer){
    const char *nom = strchr(buffer, ' ');  
    if (!nom){
@@ -450,6 +448,8 @@ static void respond_to_challenge(Client * sender, Challenge ** challenges, const
    }
    write_client((*sender).sock,"no one challenged you by that name");
 }
+
+
 
 
 
@@ -542,11 +542,6 @@ static void send_game_update(Client * sender, int i, char * move, char* nom, int
 }
 
 
-
-
-
-
-
 static void challenge(Client * sender, Client *clients, int actual, char* name, Challenge ** challenges,const char * buffer){
    if(!strcmp(name, (*sender).name)){
       write_client((*sender).sock, "can't challenge yourself!"); 
@@ -590,6 +585,11 @@ static void challenge(Client * sender, Client *clients, int actual, char* name, 
    write_client((*sender).sock, "no user found with this pseudo");
 
 };
+
+
+
+
+
 
 static void send_player_list(int actual,Client * sender,Client *clients){
    int i = 0;
