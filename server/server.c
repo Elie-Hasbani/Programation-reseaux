@@ -155,12 +155,12 @@ static void app(void)
                   remove_client(clients, i, &actual);
                   strncpy(buffer, client.name, BUF_SIZE - 1);
                   strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
-                  send_message_to_all_clients(clients, client, actual, buffer, 1);
+                  send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
                }
                else
                {
                   buffer[strcspn(buffer, "\n")] = '\0';
-                  read_and_handle_message(clients, client, actual, buffer, 0,challenges);
+                  read_and_handle_message(clients, &(clients[i]), actual, buffer, 0,challenges);
                   //send_message_to_all_clients(clients, client, actual, buffer, 0);
                   fflush(stdout);
                }
@@ -223,7 +223,7 @@ static void app(void)
 }
 
 
-static void read_and_handle_message(Client *clients, Client sender, int actual, const char *buffer, char from_server,Challenge * challenges){
+static void read_and_handle_message(Client *clients, Client * sender, int actual, const char *buffer, char from_server,Challenge * challenges){
 
    /*char* dest;
    const char *space = strchr(buffer, ' ');  // trouve le premier espace
@@ -231,9 +231,11 @@ static void read_and_handle_message(Client *clients, Client sender, int actual, 
    strncpy(dest, buffer, len);
    dest[len] = '\0';*/
 
-   if(!strcmp(buffer, "1")){
+   if(strstr(buffer, "list")){
       printf("sending player list\n");
-      send_player_list(actual,sender,clients);
+      if(strstr(buffer, "players")){send_player_list(actual,sender,clients);}
+      if(strstr(buffer, "games")){send_game_list(sender);}
+
    }else if(strstr(buffer, "challenge")){
       printf("user wants to challenge ");
 
@@ -241,7 +243,7 @@ static void read_and_handle_message(Client *clients, Client sender, int actual, 
       if(!nom){return;}
       ++nom;
       printf(nom);printf("\n");
-      challenge(sender, clients, actual, nom, challenges);
+      challenge(sender, clients, actual, nom, challenges,buffer);
       
    }else if(strstr(buffer, "response")){
       respond_to_challenge(sender,challenges,buffer);
@@ -258,34 +260,53 @@ static void read_and_handle_message(Client *clients, Client sender, int actual, 
    }
 }
 
-static void spectate_match(Client sender, const char *buffer){
+static void send_game_list(Client *sender){
+   int i = 0;
+   char message[BUF_SIZE];
+   strcat(message, "matches that ore being played now:\n");
+   message[0] = 0;
+   for(i = 0; i < match_actual; i++)
+   {
+      char buff[100];
+      snprintf(buff, sizeof(message), "%s and %s score is: %s",matches[i] -> pair[0]->name, matches[i] -> pair[1]->name ,matches[i] -> grid);
+      if(i!= match_actual-1){
+         strcat(buff, "\n");
+      }
+      strncat(message, buff, sizeof message - strlen(message) - 1);
+
+   }
+   write_client((*sender).sock, message);   
+
+}
+
+static void spectate_match(Client * sender, const char *buffer){
    char _[20], nom1[20], nom2[20];
-   if(!strcmp(sender.name, nom1) || !strcmp(sender.name, nom2)){write_client(sender.sock, "can't specate a mach you may be in");}
+   if(!strcmp((*sender).name, nom1) || !strcmp((*sender).name, nom2)){write_client((*sender).sock, "can't specate a mach you may be in");}
    sscanf(buffer, "%s %s %s", _, nom1, nom2);
    for(int i = 0;i<match_actual;++i){
-      if((!strcmp(nom1, matches[i]->pair[0].name) && !strcmp(nom2, matches[i]->pair[1].name))||(!strcmp(nom2, matches[i]->pair[0].name) && !strcmp(nom1, matches[i]->pair[1].name) )){
+      if((!strcmp(nom1, matches[i]->pair[0]->name) && !strcmp(nom2, matches[i]->pair[1]->name))||(!strcmp(nom2, matches[i]->pair[0]->name) && !strcmp(nom1, matches[i]->pair[1]->name) )){
          
          matches[i]->spectators[matches[i]->nb_spectators] = sender;
          ++matches[i]->nb_spectators;
          return;
       }
    }
-   write_client(sender.sock, "no mach found");
+   write_client((*sender).sock, "no mach found");
 }
 
 
 
 
-static void respond_to_challenge(Client sender, Challenge ** challenges, const char * buffer){
+static void respond_to_challenge(Client * sender, Challenge ** challenges, const char * buffer){
    const char *nom = strchr(buffer, ' ');  
    if (!nom){
-      write_client(sender.sock,"commande introuvable" ); return;
+      write_client((*sender).sock,"commande introuvable" ); return;
    } 
    nom++;  
 
    const char *reponse = strchr(nom, ' '); 
    if (!reponse){
-      write_client(sender.sock,"commande introuvable" ); return;
+      write_client((*sender).sock,"commande introuvable" ); return;
       
    } 
    reponse++;
@@ -299,24 +320,24 @@ static void respond_to_challenge(Client sender, Challenge ** challenges, const c
    printf("nom = %s\n", nom_formated);
    for(int i = 0; i<challenge_actual; ++i){
       Challenge * challenge = challenges[i];
-      if(!strcmp(challenge->pair[1].name,sender.name)){
-         if(!strcmp(nom_formated, challenge->pair[0].name)){
+      if(!strcmp(challenge->pair[1]->name,(*sender).name)){
+         if(!strcmp(nom_formated, challenge->pair[0]->name)){
             if(!strcmp(reponse, "yes")){
                char message[50] = "challenge accepted by ";
-               strcat(message, challenge->pair[1].name);
-               write_client(challenge->pair[0].sock,message);
+               strcat(message, challenge->pair[1]->name);
+               write_client(challenge->pair[0]->sock,message);
                create_match(challenge);
 
                return;
             }
             if(!strcmp(reponse, "no")){
                char message[50] = "challenge not accepted by ";
-               strcat(message, challenge->pair[1].name);
-               write_client(challenge->pair[0].sock,message );
+               strcat(message, challenge->pair[1]->name);
+               write_client(challenge->pair[0]->sock,message );
                return;
             }
             else{
-               write_client(challenge->pair[1].sock,"not a valid reponse");
+               write_client(challenge->pair[1]->sock,"not a valid reponse");
                return;
             }
 
@@ -327,7 +348,7 @@ static void respond_to_challenge(Client sender, Challenge ** challenges, const c
       }
       
    }
-   write_client(sender.sock,"no one challenged you by that name");
+   write_client((*sender).sock,"no one challenged you by that name");
 }
 
 
@@ -343,48 +364,52 @@ static void create_match(Challenge * challenge){
 
 }
 
-static void play_move(Client sender, const char *buffer){
+static void play_move(Client * sender, const char *buffer){
    char _[20], nom[20], move[20];
    sscanf(buffer, "%s %s %s", _, nom, move);
    int index = 9;
    fflush(stdout);
    for(int i = 0; i<match_actual; ++i){
-      if(!strcmp(sender.name, matches[i]->pair[0].name) && !strcmp(nom, matches[i]->pair[1].name)){
-         strcpy(matches[i]->grid, move); ///to change
+      if(!strcmp((*sender).name, matches[i]->pair[0]->name) && !strcmp(nom, matches[i]->pair[1]->name)){
+         /*strcpy(matches[i]->grid, move); ///to change
+
          char message[100];      
-         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",sender.name, move);
-         write_client(matches[i]->pair[1].sock, message);
+         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
+         write_client(matches[i]->pair[1]->sock, message);
          char message2[100]; 
          snprintf(message2, sizeof(message2), "new state of grid is now: %s\n",matches[i]->grid);
-         write_client(matches[i]->pair[1].sock, message2);
-         write_client(matches[i]->pair[0].sock, message2);
+         write_client(matches[i]->pair[1]->sock, message2);
+         write_client(matches[i]->pair[0]->sock, message2);
 
          for(int j = 0; j<matches[i]->nb_spectators; ++j){
             char message[100];      
-            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",sender.name, nom ,move);
-            write_client(matches[i]->spectators[j].sock, message);
-            write_client(matches[i]->spectators[j].sock, message2);
-         }
+            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",(*sender).name, nom ,move);
+            write_client(matches[i]->spectators[j]->sock, message);
+            write_client(matches[i]->spectators[j]->sock, message2);
+         }*/
+         strcpy(matches[i]->grid, move); ///to change
+         send_game_update(sender, i, move, nom,1);
 
          return;
          
-      }else if(!strcmp(sender.name, matches[i]->pair[1].name) && !strcmp(nom, matches[i]->pair[0].name)){
-         strcpy(matches[i]->grid, move); ///to change
+      }else if(!strcmp((*sender).name, matches[i]->pair[1]->name) && !strcmp(nom, matches[i]->pair[0]->name)){
+         /*strcpy(matches[i]->grid, move); ///to change
          char message[100];      
-         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",sender.name, move);
-         write_client(matches[i]->pair[0].sock, message);
+         snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
+         write_client(matches[i]->pair[0]->sock, message);
          char message2[100]; 
          snprintf(message2, sizeof(message2), "new state of grid is now: %s\n",matches[i]->grid);
-         write_client(matches[i]->pair[1].sock, message2);
-         write_client(matches[i]->pair[0].sock, message2);
+         write_client(matches[i]->pair[1]->sock, message2);
+         write_client(matches[i]->pair[0]->sock, message2);
 
          for(int j = 0; j<matches[i]->nb_spectators; ++j){
             char message[100];      
-            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",sender.name, nom ,move);
-            write_client(matches[i]->spectators[j].sock, message);
-            write_client(matches[i]->spectators[j].sock, message2);
-         }
-
+            snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",(*sender).name, nom ,move);
+            write_client(matches[i]->spectators[j]->sock, message);
+            write_client(matches[i]->spectators[j]->sock, message2);
+         }*/
+         strcpy(matches[i]->grid, move); ///to change
+         send_game_update(sender, i, move, nom,0);
          return;
          
 
@@ -392,9 +417,31 @@ static void play_move(Client sender, const char *buffer){
    }
 
    
-   write_client(sender.sock, "no match found with thi user name\n");
+   write_client((*sender).sock, "no match found with thi user name\n");
 
 
+
+}
+
+
+static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
+
+   char message[100];      
+   snprintf(message, sizeof(message), "move played in match with %s is: %s",(*sender).name, move);
+   write_client(matches[i]->pair[index]->sock, message);
+   char message2[100]; 
+   snprintf(message2, sizeof(message2), "new state of grid is now: %s",matches[i]->grid);
+   write_client(matches[i]->pair[1]->sock, message2);
+   write_client(matches[i]->pair[0]->sock, message2);
+
+   for(int j = 0; j<matches[i]->nb_spectators; ++j){
+      char message[100];      
+      snprintf(message, sizeof(message), "move played in match between %s and %s is: %s\n",(*sender).name, nom ,move);
+      write_client(matches[i]->spectators[j]->sock, message);
+      write_client(matches[i]->spectators[j]->sock, message2);
+   }
+
+   return;
 
 }
 
@@ -404,27 +451,32 @@ static void play_move(Client sender, const char *buffer){
 
 
 
-static void challenge(Client sender, Client *clients, int actual, char* name, Challenge ** challenges){
-   if(!strcmp(name, sender.name)){
-      write_client(sender.sock, "can't challenge yourself!");
+static void challenge(Client * sender, Client *clients, int actual, char* name, Challenge ** challenges,const char * buffer){
+   if(!strcmp(name, (*sender).name)){
+      write_client((*sender).sock, "can't challenge yourself!");
       return;
    }
+   int private_game = 0;
+   if(strstr(buffer, "private")){
+
+   }
+   
    for(int i=0; i<challenge_actual;++i){
       Challenge * challenge = challenges[i];
-      if(!strcmp(challenge->pair[0].name, sender.name) && !strcmp(challenge->pair[1].name, name)){
-         write_client(sender.sock, "you already challenged this player");
-         return;;
+      if(!strcmp(challenge->pair[0]->name, (*sender).name) && !strcmp(challenge->pair[1]->name, name)){
+         write_client((*sender).sock, "you already challenged this player");
+         return;
       }
-      if(!strcmp(challenge->pair[1].name, sender.name) && !strcmp(challenge->pair[0].name, name)){
-         write_client(sender.sock, "this player already challenged you, respond");
+      if(!strcmp(challenge->pair[1]->name, (*sender).name) && !strcmp(challenge->pair[0]->name, name)){
+         write_client((*sender).sock, "this player already challenged you, respond");
          return;
       }
    }
    for(int i = 0; i<actual; ++i){
       if(!strcmp(name, clients[i].name)){
-         write_client(sender.sock, "challenge sent");
+         write_client((*sender).sock, "challenge sent");
          
-         write_client(clients[i].sock, sender.name);
+         write_client(clients[i].sock, (*sender).name);
          char * message =" is challenging you";
          write_client(clients[i].sock, message);
 
@@ -432,18 +484,18 @@ static void challenge(Client sender, Client *clients, int actual, char* name, Ch
 
          Challenge * challenge = malloc(sizeof(Challenge));
          challenge->pair[0] = sender;
-         challenge ->pair[1] = clients[i];
+         challenge ->pair[1] = &(clients[i]);
          challenges[challenge_actual] = challenge;
          ++challenge_actual;
          return;
 
       }      
    }
-   write_client(sender.sock, "no user found with this pseudo");
+   write_client((*sender).sock, "no user found with this pseudo");
 
 };
 
-static void send_player_list(int actual,Client sender,Client *clients){
+static void send_player_list(int actual,Client * sender,Client *clients){
    int i = 0;
    char message[BUF_SIZE];
    message[0] = 0;
@@ -455,7 +507,7 @@ static void send_player_list(int actual,Client sender,Client *clients){
       }
 
    }
-   write_client(sender.sock, message);   
+   write_client((*sender).sock, message);   
 
 }
 
@@ -477,7 +529,7 @@ static void remove_client(Client *clients, int to_remove, int *actual)
 }
 
 
-static void send_message_to_all_clients(Client *clients, Client sender, int actual, const char *buffer, char from_server)
+static void send_message_to_all_clients(Client *clients, Client* sender, int actual, const char *buffer, char from_server)
 {
    int i = 0;
    char message[BUF_SIZE];
@@ -485,11 +537,11 @@ static void send_message_to_all_clients(Client *clients, Client sender, int actu
    for(i = 0; i < actual; i++)
    {
       /* we don't send message to the sender */
-      if(sender.sock != clients[i].sock)
+      if((*sender).sock != clients[i].sock)
       {
          if(from_server == 0)
          {
-            strncpy(message, sender.name, BUF_SIZE - 1);
+            strncpy(message, (*sender).name, BUF_SIZE - 1);
             strncat(message, " : ", sizeof message - strlen(message) - 1);
          }
          strncat(message, buffer, sizeof message - strlen(message) - 1);
