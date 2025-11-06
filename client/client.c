@@ -56,7 +56,7 @@ static void app(const char *address, const char *name)
 
 
    }
-   printf("inscription réussie\n");
+   printf("(re)inscription réussie\n");
    fflush(stdout);
 
 

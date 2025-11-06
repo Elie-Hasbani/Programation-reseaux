@@ -162,6 +162,7 @@ static void app(void)
                   if(c == 0) 
                   {
                      closesocket(clients[i].sock);
+                     //shutdown(clients[i].sock, SHUT_RDWR);
                      clients[i].state = -1;
                      //remove_client(clients, i, &actual);
                      strncpy(buffer, client.name, BUF_SIZE - 1);
@@ -196,10 +197,11 @@ static void app(void)
                }
                else if(client.first_connexion == -1){
                   if(!strcmp(buffer,"yes")){
-                     write_client(client.sock, "entrer un pseudo:");
+                     write_client(client.sock, "entrer un pseudo password:");
                      clients_not_loged_in[i].first_connexion = 1;
                   }
                   else if(!strcmp(buffer,"no")){
+                     write_client(client.sock, "entrer votre pseudo password:");
                      clients_not_loged_in[i].first_connexion = 0;
                   }else{
                      write_client(client.sock, "please enter a valid response");
@@ -210,11 +212,15 @@ static void app(void)
                {
                   buffer[strcspn(buffer, "\n")] = '\0';
                   int exists = 0;
+                  char nom[20], pswd[20];
+                  sscanf(buffer, "%s %s", nom, pswd);
+                  if(!nom || !pswd){write_client(client.sock, "enter name and pswd do not test me");continue;}
+
                   //check if pseudo is already used
                   for(int j=0; j<actual;++j){
-                     if(!strcmp(buffer,clients[j].name)){
+                     if(!strcmp(nom,clients[j].name)){
                         printf("pseudo recieved already in use\n");
-                        write_client(client.sock, "pseudo already in use enter another one:");
+                        write_client(client.sock, "pseudo already in use enter another one(with password):");
                         fflush(stdout);
                         //char * message = "code700";
                         //write_client(clients_not_loged_in[i].sock, message);
@@ -226,7 +232,9 @@ static void app(void)
                      char * message = "code100";
                      printf("client inscrit\n");
                      write_client(clients_not_loged_in[i].sock, message);
-                     strncpy(clients_not_loged_in[i].name, buffer, BUF_SIZE - 1);
+                     strncpy(clients_not_loged_in[i].name, nom, BUF_SIZE - 1);
+                     strncpy(clients_not_loged_in[i].pswd, pswd, BUF_SIZE - 1);
+
                      
                      fflush(stdout);
                      clients[actual] = clients_not_loged_in[i];
@@ -234,6 +242,31 @@ static void app(void)
                      remove_client(clients_not_loged_in, i, &actual_not_loged);
                      ++actual;
                   }
+                           
+                  
+               }
+               else if(client.first_connexion == 0)
+               {
+                  buffer[strcspn(buffer, "\n")] = '\0';
+                  int exists = 0;
+                  char nom[20], pswd[20];
+                  if (sscanf(buffer, "%s %s", nom, pswd) != 2) {
+                     write_client(client.sock, "enter name and pswd do not test me");
+                     continue;
+                  }
+                  //check if pseudo is already used
+                  for(int j=0; j<actual;++j){
+                     if(!strcmp(nom,clients[j].name) && !strcmp(pswd, clients[j].pswd)){
+                        write_client(client.sock, "code100");
+                        fflush(stdout);
+                        clients[j].sock = client.sock;
+                        clients[j].state = 0; 
+                        remove_client(clients_not_loged_in, i, &actual_not_loged);
+                        exists = 1;
+                        break;
+                     }
+                  }
+                  if(exists != 1){write_client(client.sock, "wrong password and user name");}
                            
                   
                }
@@ -256,6 +289,8 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
    size_t len = (space) ? (size_t)(space - buffer) : strlen(buffer);
    strncpy(dest, buffer, len);
    dest[len] = '\0';*/
+   char _[20], nom[20];
+   sscanf(buffer, "%s %s %s", _, nom);
 
    if(strstr(buffer, "list")){
       printf("sending player list\n");
@@ -420,6 +455,21 @@ static void play_move(Client * sender, const char *buffer){
          return;
          
       }else if(!strcmp((*sender).name, matches[i]->pair[1]->name) && !strcmp(nom, matches[i]->pair[0]->name)){
+         if(sender->state == -1 && matches[i]->pair[0]->state == -1){
+            return;
+         }
+         else if(sender->state == -1 && matches[i]->pair[0]->state != -1){
+            char message[50];
+            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
+            write_client(matches[i]->pair[1]->sock, message);
+            return;
+         }
+         else if(sender->state != -1 && matches[i]->pair[0]->state == -1){
+            char message[50];
+            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
+            write_client(sender->sock, message);
+            return;
+         }
          strcpy(matches[i]->grid, move); ///to change
          send_game_update(sender, i, move, nom,0);
          return;
