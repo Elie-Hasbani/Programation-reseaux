@@ -30,7 +30,7 @@ static void app(const char *address, const char *name)
    SOCKET sock = init_connection(address);
    char buffer[BUF_SIZE];
    //demander pseudo a l'utilisateur
-   printf("entrer votre pseudo:");
+   printf("first time connexion? ");
    fgets(buffer, BUF_SIZE - 1, stdin);
    buffer[strcspn(buffer, "\n")] = '\0';
    
@@ -46,7 +46,6 @@ static void app(const char *address, const char *name)
    fflush(stdout);
    while(strcmp(buffer,"code100")){
       printf("%s\n",buffer);
-      printf("pseudo deja utilisé, mettre un autre: ");
       fgets(buffer, BUF_SIZE - 1, stdin);
       buffer[strcspn(buffer, "\n")] = '\0';
       write_server(sock, buffer);

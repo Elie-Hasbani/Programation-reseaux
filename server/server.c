@@ -38,7 +38,7 @@ static void app(void)
    /* an array for all clients */
    Client clients[MAX_CLIENTS];
    Client clients_not_loged_in[MAX_CLIENTS-1];
-   int actual_not_loged;
+   int actual_not_loged = 0;
 
    Challenge * challenges[100];
 
@@ -58,7 +58,9 @@ static void app(void)
       /* add socket of each client */
       for(i = 0; i < actual; i++)
       {
-         FD_SET(clients[i].sock, &rdfs);
+         if(clients[i].state != -1){
+            FD_SET(clients[i].sock, &rdfs);
+         }
       }
 
       for(i = 0; i < actual_not_loged; i++)
@@ -105,10 +107,14 @@ static void app(void)
 
          FD_SET(csock, &rdfs);
 
+
          fflush(stdout);
          Client c = { csock };
+         c.first_connexion = -1;
          clients_not_loged_in[actual_not_loged] = c;
          actual_not_loged++;
+         
+
 
          /*strncpy(c.name, buffer, BUF_SIZE - 1);
 
@@ -143,29 +149,34 @@ static void app(void)
          int i = 0;
          for(i = 0; i < actual; i++)
          {
-            /* a client is talking */
-            if(FD_ISSET(clients[i].sock, &rdfs))
-            {
-               Client client = clients[i];
-               int c = read_client(clients[i].sock, buffer);
-               /* client disconnected */
-               if(c == 0)
+
+            if(clients[i].state != -1){
+               /* a client is talking */
+               if(FD_ISSET(clients[i].sock, &rdfs))
                {
-                  closesocket(clients[i].sock);
-                  clients[i].state = -1;
-                  //remove_client(clients, i, &actual);
-                  strncpy(buffer, client.name, BUF_SIZE - 1);
-                  strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
-                  send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
-               }
-               else
-               {
-                  buffer[strcspn(buffer, "\n")] = '\0';
-                  read_and_handle_message(clients, &(clients[i]), actual, buffer, 0,challenges);
-                  //send_message_to_all_clients(clients, client, actual, buffer, 0);
+                  printf("decoding message");
                   fflush(stdout);
+                  Client client = clients[i];
+                  int c = read_client(clients[i].sock, buffer);
+                  /* client disconnected */
+                  if(c == 0) 
+                  {
+                     closesocket(clients[i].sock);
+                     clients[i].state = -1;
+                     //remove_client(clients, i, &actual);
+                     strncpy(buffer, client.name, BUF_SIZE - 1);
+                     strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
+                     //send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
+                  }
+                  else if(client.state != -1)
+                  {
+                     buffer[strcspn(buffer, "\n")] = '\0';
+                     read_and_handle_message(clients, &(clients[i]), actual, buffer, 0,challenges);
+                     //send_message_to_all_clients(clients, client, actual, buffer, 0);
+                     fflush(stdout);
+                  }
+                  break;
                }
-               break;
             }
          }
          //see the clients that are not logged in yet
@@ -183,7 +194,19 @@ static void app(void)
                   remove_client(clients_not_loged_in, i, &actual_not_loged);
                   printf("client disconnected before giving a valid pseudo");
                }
-               else
+               else if(client.first_connexion == -1){
+                  if(!strcmp(buffer,"yes")){
+                     write_client(client.sock, "entrer un pseudo:");
+                     clients_not_loged_in[i].first_connexion = 1;
+                  }
+                  else if(!strcmp(buffer,"no")){
+                     clients_not_loged_in[i].first_connexion = 0;
+                  }else{
+                     write_client(client.sock, "please enter a valid response");
+                  }
+                  continue;
+               }
+               else if(client.first_connexion == 1)
                {
                   buffer[strcspn(buffer, "\n")] = '\0';
                   int exists = 0;
@@ -191,9 +214,10 @@ static void app(void)
                   for(int j=0; j<actual;++j){
                      if(!strcmp(buffer,clients[j].name)){
                         printf("pseudo recieved already in use\n");
+                        write_client(client.sock, "pseudo already in use enter another one:");
                         fflush(stdout);
-                        char * message = "code700";
-                        write_client(clients_not_loged_in[i].sock, message);
+                        //char * message = "code700";
+                        //write_client(clients_not_loged_in[i].sock, message);
                         exists = 1;
                         break;
                      }
@@ -206,6 +230,7 @@ static void app(void)
                      
                      fflush(stdout);
                      clients[actual] = clients_not_loged_in[i];
+                     clients[actual].state = 0;
                      remove_client(clients_not_loged_in, i, &actual_not_loged);
                      ++actual;
                   }
@@ -237,7 +262,7 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
       if(strstr(buffer, "players")){send_player_list(actual,sender,clients);}
       if(strstr(buffer, "games")){send_game_list(sender);}
 
-   }else if(strstr(buffer, "challenge")){
+   }else if(strstr(buffer, "c")){
       printf("user wants to challenge ");
 
       const char *nom = strchr(buffer, ' ');  // trouve le premier espace
@@ -246,7 +271,7 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
       printf(nom);printf("\n");
       challenge(sender, clients, actual, nom, challenges,buffer);
       
-   }else if(strstr(buffer, "response")){
+   }else if(strstr(buffer, "r")){
       respond_to_challenge(sender,challenges,buffer);
    }else if(strstr(buffer, "play")){
       printf("playing move");
@@ -388,7 +413,6 @@ static void play_move(Client * sender, const char *buffer){
             return;
          }
 
-         
          strcpy(matches[i]->grid, move); ///to change
          send_game_update(sender, i, move, nom,1);
 
