@@ -39,35 +39,22 @@ static void init_game(game_t *g) {
 }
 
 
+
+
 static void ascii_board(game_t *g, char *out, size_t out_sz) {
     char top[256]="", bottom[256]="", tmp[64];
-
-    for (int i = 0; i <= 5; ++i) {
-        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
-        strncat(top, tmp, sizeof(top) - strlen(top) - 1);
-    }
-
-    for (int i = 6; i <= 11; ++i) {
-        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
-        strncat(bottom, tmp, sizeof(bottom) - strlen(bottom) - 1);
-    }
-
-    snprintf(out, out_sz,
+    for (int i=11;i>=6;--i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(top,tmp,sizeof(top)-strlen(top)-1); }
+    for (int i=0;i<=5;++i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(bottom,tmp,sizeof(bottom)-strlen(bottom)-1); }
+    snprintf(out,out_sz,
         "  +--------------------------------------\n"
-        "  |  %s |  <- %s (pits 0..5)\n"
-        "%s captures: %2d\n"
+        "  |  %s |  <- Player 2 (pits 11..6)\n"
+        "P2 captures: %2d\n"
         "  |--------------------------------------|\n"
-        "  |  %s |  <- %s (pits 6..11)\n"
-        "%s captures: %2d\n"
+        "  |  %s |  <- Player 1 (pits 0..5)\n"
+        "P1 captures: %2d\n"
         "  +--------------------------------------+\n"
-        "  Turn: %s | Phase: %s\n",
-        top, g->player[0]->name,
-        g->player[0]->name, g->captured[0],
-        bottom, g->player[1]->name,
-        g->player[1]->name, g->captured[1],
-        g->player[g->turn]->name,
-        g->phase == 0 ? "playing" : "finished"
-    );
+        "  Turn: Player %d | Phase: %s\n",
+        top,g->captured[1],bottom,g->captured[0],g->turn,g->phase==0?"playing":"finished");
 }
 
 
@@ -340,18 +327,16 @@ static void app(void)
 
 static void read_and_handle_message(Client *clients, Client * sender, int actual, const char *buffer, char from_server,Challenge * challenges){
 
-   /*char* dest;
-   const char *space = strchr(buffer, ' ');  // trouve le premier espace
-   size_t len = (space) ? (size_t)(space - buffer) : strlen(buffer);
-   strncpy(dest, buffer, len);
-   dest[len] = '\0';*/
+char _[20], nom[20];
+   sscanf(buffer, "%s %s %s", _, nom);
+
 
    if(strstr(buffer, "list")){
       printf("sending player list\n");
       if(strstr(buffer, "players")){send_player_list(actual,sender,clients);}
       if(strstr(buffer, "games")){send_game_list(sender);}
 
-   }else if(strstr(buffer, "challenge")){
+   }else if(strstr(buffer, "c")){
       printf("user wants to challenge ");
 
       const char *nom = strchr(buffer, ' ');  // trouve le premier espace
@@ -360,7 +345,7 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
       printf(nom);printf("\n");
       challenge(sender, clients, actual, nom, challenges,buffer);
       
-   }else if(strstr(buffer, "response")){
+   }else if(strstr(buffer, "r")){
       respond_to_challenge(sender,challenges,buffer);
    }else if(strstr(buffer, "play")){
       printf("playing move");
@@ -468,10 +453,6 @@ static void respond_to_challenge(Client * sender, Challenge ** challenges, const
 }
 
 
-
-
-
-
 static void create_match(Challenge *challenge){
     Match *match = malloc(sizeof(Match));
     match->pair[0] = challenge->pair[0];
@@ -485,6 +466,9 @@ static void create_match(Challenge *challenge){
     write_client(match->pair[0]->sock, board_buf);
     write_client(match->pair[1]->sock, board_buf);
 }
+
+
+
 
 
 static void play_move(Client *sender, const char *buffer){
