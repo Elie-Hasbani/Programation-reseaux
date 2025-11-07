@@ -49,7 +49,7 @@ typedef struct {
     Client * pair[2];
     Client * spectators[5];
     int nb_spectators;
-    game_t game;   // <── replaces grid
+    game_t game;   
 } Match;
 
 typedef struct {Client * pair[2]} Challenge;
@@ -77,4 +77,5 @@ static void play_move(Client *sender, const char *buffer);
 static void spectate_match(Client *sender, const char *buffer);
 static void send_game_list(Client *sender);
 static void send_game_update(Client * sender, int i, char * move, char* nom, int index);
+static void find_client_by_name(Client * clients, const char * buffer, int actual,Client *);
 #endif /* guard */
