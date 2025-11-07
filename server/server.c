@@ -6,27 +6,6 @@
 #include "server.h"
 #include "client.h"
 
-static void init(void)
-{
-#ifdef WIN32
-   WSADATA wsa;
-   int err = WSAStartup(MAKEWORD(2, 2), &wsa);
-   if(err < 0)
-   {
-      puts("WSAStartup failed !");
-      exit(EXIT_FAILURE);
-   }
-#endif
-}
-
-static void end(void)
-{
-#ifdef WIN32
-   WSACleanup();
-#endif
-}
-
-
 
 /* ---------------- Awale (Oware) Game Logic ---------------- */
 
@@ -39,23 +18,38 @@ static void init_game(game_t *g) {
 }
 
 
-
-
 static void ascii_board(game_t *g, char *out, size_t out_sz) {
-    char top[256]="", bottom[256]="", tmp[64];
-    for (int i=11;i>=6;--i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(top,tmp,sizeof(top)-strlen(top)-1); }
-    for (int i=0;i<=5;++i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(bottom,tmp,sizeof(bottom)-strlen(bottom)-1); }
-    snprintf(out,out_sz,
-        "  +--------------------------------------\n"
-        "  |  %s |  <- Player 2 (pits 11..6)\n"
-        "P2 captures: %2d\n"
-        "  |--------------------------------------|\n"
+    char top[256] = "", bottom[256] = "", tmp[64];
+
+    // Ligne du joueur 1 (0..5)
+    for (int i = 0; i <= 5; ++i) {
+        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
+        strncat(top, tmp, sizeof(top) - strlen(top) - 1);
+    }
+
+    // Ligne du joueur 2 (6..11)
+    for (int i = 6; i <= 11; ++i) {
+        snprintf(tmp, sizeof(tmp), "%2d ", g->board[i]);
+        strncat(bottom, tmp, sizeof(bottom) - strlen(bottom) - 1);
+    }
+
+    // Construction du plateau ASCII
+    snprintf(out, out_sz,
+        "  +--------------------------------------+\n"
         "  |  %s |  <- Player 1 (pits 0..5)\n"
         "P1 captures: %2d\n"
+        "  |--------------------------------------|\n"
+        "  |  %s |  <- Player 2 (pits 6..11)\n"
+        "P2 captures: %2d\n"
         "  +--------------------------------------+\n"
         "  Turn: Player %d | Phase: %s\n",
-        top,g->captured[1],bottom,g->captured[0],g->turn,g->phase==0?"playing":"finished");
+        top, g->captured[0],
+        bottom, g->captured[1],
+        g->turn,
+        g->phase == 0 ? "playing" : "finished");
 }
+
+
 
 
 
@@ -123,10 +117,25 @@ static int winner(game_t *g){
 /* --------------------------------------------------------- */
 
 
+static void init(void)
+{
+#ifdef WIN32
+   WSADATA wsa;
+   int err = WSAStartup(MAKEWORD(2, 2), &wsa);
+   if(err < 0)
+   {
+      puts("WSAStartup failed !");
+      exit(EXIT_FAILURE);
+   }
+#endif
+}
 
-
-
-
+static void end(void)
+{
+#ifdef WIN32
+   WSACleanup();
+#endif
+}
 int match_actual = 0;
 int challenge_actual = 0;
 Match * matches[100];
@@ -140,7 +149,7 @@ static void app(void)
    /* an array for all clients */
    Client clients[MAX_CLIENTS];
    Client clients_not_loged_in[MAX_CLIENTS-1];
-   int actual_not_loged;
+   int actual_not_loged = 0;
 
    Challenge * challenges[100];
 
@@ -160,7 +169,9 @@ static void app(void)
       /* add socket of each client */
       for(i = 0; i < actual; i++)
       {
-         FD_SET(clients[i].sock, &rdfs);
+         if(clients[i].state != -1){
+            FD_SET(clients[i].sock, &rdfs);
+         }
       }
 
       for(i = 0; i < actual_not_loged; i++)
@@ -207,10 +218,14 @@ static void app(void)
 
          FD_SET(csock, &rdfs);
 
+
          fflush(stdout);
          Client c = { csock };
+         c.first_connexion = -1;
          clients_not_loged_in[actual_not_loged] = c;
          actual_not_loged++;
+         
+
 
          /*strncpy(c.name, buffer, BUF_SIZE - 1);
 
@@ -245,28 +260,35 @@ static void app(void)
          int i = 0;
          for(i = 0; i < actual; i++)
          {
-            /* a client is talking */
-            if(FD_ISSET(clients[i].sock, &rdfs))
-            {
-               Client client = clients[i];
-               int c = read_client(clients[i].sock, buffer);
-               /* client disconnected */
-               if(c == 0)
+
+            if(clients[i].state != -1){
+               /* a client is talking */
+               if(FD_ISSET(clients[i].sock, &rdfs))
                {
-                  closesocket(clients[i].sock);
-                  //remove_client(clients, i, &actual);
-                  strncpy(buffer, client.name, BUF_SIZE - 1);
-                  strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
-                  send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
-               }
-               else
-               {
-                  buffer[strcspn(buffer, "\n")] = '\0';
-                  read_and_handle_message(clients, &(clients[i]), actual, buffer, 0,challenges);
-                  //send_message_to_all_clients(clients, client, actual, buffer, 0);
+                  printf("decoding message");
                   fflush(stdout);
+                  Client client = clients[i];
+                  int c = read_client(clients[i].sock, buffer);
+                  /* client disconnected */
+                  if(c == 0) 
+                  {
+                     closesocket(clients[i].sock);
+                     //shutdown(clients[i].sock, SHUT_RDWR);
+                     clients[i].state = -1;
+                     //remove_client(clients, i, &actual);
+                     strncpy(buffer, client.name, BUF_SIZE - 1);
+                     strncat(buffer, " disconnected !", BUF_SIZE - strlen(buffer) - 1);
+                     //send_message_to_all_clients(clients, &(clients[i]), actual, buffer, 1);
+                  }
+                  else if(client.state != -1)
+                  {
+                     buffer[strcspn(buffer, "\n")] = '\0';
+                     read_and_handle_message(clients, &(clients[i]), actual, buffer, 0,challenges);
+                     //send_message_to_all_clients(clients, client, actual, buffer, 0);
+                     fflush(stdout);
+                  }
+                  break;
                }
-               break;
             }
          }
          //see the clients that are not logged in yet
@@ -284,17 +306,35 @@ static void app(void)
                   remove_client(clients_not_loged_in, i, &actual_not_loged);
                   printf("client disconnected before giving a valid pseudo");
                }
-               else
+               else if(client.first_connexion == -1){
+                  if(!strcmp(buffer,"yes")){
+                     write_client(client.sock, "entrer un pseudo password:");
+                     clients_not_loged_in[i].first_connexion = 1;
+                  }
+                  else if(!strcmp(buffer,"no")){
+                     write_client(client.sock, "entrer votre pseudo password:");
+                     clients_not_loged_in[i].first_connexion = 0;
+                  }else{
+                     write_client(client.sock, "please enter a valid response");
+                  }
+                  break;
+               }
+               else if(client.first_connexion == 1)
                {
                   buffer[strcspn(buffer, "\n")] = '\0';
                   int exists = 0;
+                  char nom[20], pswd[20];
+                  sscanf(buffer, "%s %s", nom, pswd);
+                  if(!nom || !pswd){write_client(client.sock, "enter name and pswd do not test me");continue;}
+
                   //check if pseudo is already used
                   for(int j=0; j<actual;++j){
-                     if(!strcmp(buffer,clients[j].name)){
+                     if(!strcmp(nom,clients[j].name)){
                         printf("pseudo recieved already in use\n");
+                        write_client(client.sock, "pseudo already in use enter another one(with password):");
                         fflush(stdout);
-                        char * message = "code700";
-                        write_client(clients_not_loged_in[i].sock, message);
+                        //char * message = "code700";
+                        //write_client(clients_not_loged_in[i].sock, message);
                         exists = 1;
                         break;
                      }
@@ -303,13 +343,41 @@ static void app(void)
                      char * message = "code100";
                      printf("client inscrit\n");
                      write_client(clients_not_loged_in[i].sock, message);
-                     strncpy(clients_not_loged_in[i].name, buffer, BUF_SIZE - 1);
+                     strncpy(clients_not_loged_in[i].name, nom, BUF_SIZE - 1);
+                     strncpy(clients_not_loged_in[i].pswd, pswd, BUF_SIZE - 1);
+
                      
                      fflush(stdout);
                      clients[actual] = clients_not_loged_in[i];
+                     clients[actual].state = 0;
                      remove_client(clients_not_loged_in, i, &actual_not_loged);
                      ++actual;
                   }
+                           
+                  
+               }
+               else if(client.first_connexion == 0)
+               {
+                  buffer[strcspn(buffer, "\n")] = '\0';
+                  int exists = 0;
+                  char nom[20], pswd[20];
+                  if (sscanf(buffer, "%s %s", nom, pswd) != 2) {
+                     write_client(client.sock, "enter name and pswd do not test me");
+                     continue;
+                  }
+                  //check if pseudo is already used
+                  for(int j=0; j<actual;++j){
+                     if(!strcmp(nom,clients[j].name) && !strcmp(pswd, clients[j].pswd)){
+                        write_client(client.sock, "code100");
+                        fflush(stdout);
+                        clients[j].sock = client.sock;
+                        clients[j].state = 0; 
+                        remove_client(clients_not_loged_in, i, &actual_not_loged);
+                        exists = 1;
+                        break;
+                     }
+                  }
+                  if(exists != 1){write_client(client.sock, "wrong password and user name");}
                            
                   
                }
@@ -327,14 +395,18 @@ static void app(void)
 
 static void read_and_handle_message(Client *clients, Client * sender, int actual, const char *buffer, char from_server,Challenge * challenges){
 
-char _[20], nom[20];
+   /*char* dest;
+   const char *space = strchr(buffer, ' ');  // trouve le premier espace
+   size_t len = (space) ? (size_t)(space - buffer) : strlen(buffer);
+   strncpy(dest, buffer, len);
+   dest[len] = '\0';*/
+   char _[20], nom[20];
    sscanf(buffer, "%s %s %s", _, nom);
-
 
    if(strstr(buffer, "list")){
       printf("sending player list\n");
       if(strstr(buffer, "players")){send_player_list(actual,sender,clients);}
-      if(strstr(buffer, "games")){send_game_list(sender);}
+      //if(strstr(buffer, "games")){send_game_list(sender);}
 
    }else if(strstr(buffer, "c")){
       printf("user wants to challenge ");
@@ -350,6 +422,12 @@ char _[20], nom[20];
    }else if(strstr(buffer, "play")){
       printf("playing move");
       play_move(sender,buffer);
+   }
+    else if(strstr(buffer, "bio set")){
+       set_bio(sender, buffer);
+   }
+    else if(strstr(buffer, "bio show")){
+       show_bio(sender, clients, actual, buffer);
    }else if(strstr(buffer, "spectate")){
       spectate_match(sender, buffer);
    }
@@ -360,7 +438,7 @@ char _[20], nom[20];
    }
 }
 
-static void send_game_list(Client *sender){
+/*static void send_game_list(Client *sender){
    int i = 0;
    char message[BUF_SIZE];
    strcat(message, "matches that ore being played now:\n");
@@ -368,10 +446,7 @@ static void send_game_list(Client *sender){
    for(i = 0; i < match_actual; i++)
    {
       char buff[100];
-      char board_buf[512];
-      ascii_board(&matches[i]->game, board_buf, sizeof(board_buf));
-      snprintf(buff, sizeof(message), "%s vs %s\n%s", matches[i]->pair[0]->name, matches[i]->pair[1]->name, board_buf);
-
+      snprintf(buff, sizeof(message), "%s and %s score is: %s",matches[i] -> pair[0]->name, matches[i] -> pair[1]->name ,matches[i] -> grid);
       if(i!= match_actual-1){
          strcat(buff, "\n");
       }
@@ -380,7 +455,56 @@ static void send_game_list(Client *sender){
    }
    write_client((*sender).sock, message);   
 
+}*/
+
+static void set_bio(Client *sender, const char *buffer){
+    // Format attendu : "bio set" puis 10 lignes envoyées l’une après l’autre
+    write_client(sender->sock, "Enter your bio (max 10 lines). Send a single '.' to finish.\n");
+
+    sender->bio_len = 0;
+    for(int i = 0; i < BIO_LINES; i++){
+        char line[BIO_LINE_LENGTH];
+        int r = read_client(sender->sock, line);
+        if(r == 0) return;
+
+        line[strcspn(line, "\n")] = 0; 
+
+        if(strcmp(line, ".") == 0) break;
+
+        strncpy(sender->bio[i], line, BIO_LINE_LENGTH-1);
+        sender->bio_len++;
+    }
+
+    write_client(sender->sock, "Bio saved successfully.\n");
 }
+
+
+
+static void show_bio(Client *sender, Client *clients, int actual, const char *buffer){
+    char cmd[20], username[BUF_SIZE];
+    sscanf(buffer, "%s %s %s", cmd, cmd, username); // "bio show NAME"
+
+    for(int i = 0; i < actual; i++){
+        if(!strcmp(username, clients[i].name)){
+            if(clients[i].bio_len == 0){
+                write_client(sender->sock, "This user has no bio.\n");
+                return;
+            }
+            write_client(sender->sock, "---- Bio ----\n");
+            for(int l = 0; l < clients[i].bio_len; l++){
+                write_client(sender->sock, clients[i].bio[l]);
+                write_client(sender->sock, "\n");
+            }
+            write_client(sender->sock, "--------------\n");
+            return;
+        }
+    }
+    write_client(sender->sock, "No such user.\n");
+}
+
+
+
+
 
 static void spectate_match(Client * sender, const char *buffer){
    char _[20], nom1[20], nom2[20];
@@ -396,6 +520,8 @@ static void spectate_match(Client * sender, const char *buffer){
    }
    write_client((*sender).sock, "no mach found");
 }
+
+
 
 
 static void respond_to_challenge(Client * sender, Challenge ** challenges, const char * buffer){
@@ -453,6 +579,8 @@ static void respond_to_challenge(Client * sender, Challenge ** challenges, const
 }
 
 
+
+
 static void create_match(Challenge *challenge){
     Match *match = malloc(sizeof(Match));
     match->pair[0] = challenge->pair[0];
@@ -466,10 +594,6 @@ static void create_match(Challenge *challenge){
     write_client(match->pair[0]->sock, board_buf);
     write_client(match->pair[1]->sock, board_buf);
 }
-
-
-
-
 
 static void play_move(Client *sender, const char *buffer){
     char cmd[20], opp[50];
@@ -519,16 +643,12 @@ static void play_move(Client *sender, const char *buffer){
 }
 
 
-
-
-static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
+/*static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
    char message[100];      
    snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
    write_client(matches[i]->pair[index]->sock, message);
    char message2[100]; 
-   char board_buf[512];
-   ascii_board(&matches[i]->game, board_buf, sizeof(board_buf));
-   snprintf(message2, sizeof(message2), "new board state:\n%s", board_buf);
+   snprintf(message2, sizeof(message2), "new state of grid is now: %s",matches[i]->grid);
    write_client(matches[i]->pair[1]->sock, message2);
    write_client(matches[i]->pair[0]->sock, message2);
 
@@ -541,7 +661,12 @@ static void send_game_update(Client * sender, int i, char * move, char* nom, int
 
    return;
 
-}
+}*/
+
+
+
+
+
 
 
 static void challenge(Client * sender, Client *clients, int actual, char* name, Challenge ** challenges,const char * buffer){
@@ -587,11 +712,6 @@ static void challenge(Client * sender, Client *clients, int actual, char* name, 
    write_client((*sender).sock, "no user found with this pseudo");
 
 };
-
-
-
-
-
 
 static void send_player_list(int actual,Client * sender,Client *clients){
    int i = 0;
