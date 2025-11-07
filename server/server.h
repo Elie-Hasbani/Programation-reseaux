@@ -28,13 +28,33 @@ typedef struct in_addr IN_ADDR;
 
 #include "client.h"
 
-typedef struct {Client * pair[2]} Challenge;
+typedef struct {
+    int board[12];
+    int captured[2];
+    int turn;   // 1 or 2
+    int phase;  // 0 = playing, 1 = finished
+    struct {
+        int player;
+        int pit;
+        int captured_amount;
+    } history[128];
+    int history_len;
+} game_t;
+
+#define pits_of_player_start(p) ((p)==1?0:6)
+#define pits_of_player_end(p)   ((p)==1?5:11)
+#define is_opponent_pit(pit_player, pit) ((pit_player)==1?((pit)>=6 && (pit)<=11):((pit)>=0 && (pit)<=5))
+
 typedef struct {
     Client * pair[2];
     Client * spectators[5];
     int nb_spectators;
-    char grid[100]; ///////to chnage into the real awale game!!!!!!!!!!/////////////////////////////    
-}Match;
+    game_t game;   // <── replaces grid
+} Match;
+
+typedef struct {Client * pair[2]} Challenge;
+
+
 
 
 static void init(void);

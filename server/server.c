@@ -6,6 +6,102 @@
 #include "server.h"
 #include "client.h"
 
+
+/* ---------------- Awale (Oware) Game Logic ---------------- */
+
+static void init_game(game_t *g) {
+    for (int i=0;i<12;i++) g->board[i]=4;
+    g->captured[0]=g->captured[1]=0;
+    g->turn=1;
+    g->phase=0;
+    g->history_len=0;
+}
+
+
+
+
+static void ascii_board(game_t *g, char *out, size_t out_sz) {
+    char top[256]="", bottom[256]="", tmp[64];
+    for (int i=11;i>=6;--i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(top,tmp,sizeof(top)-strlen(top)-1); }
+    for (int i=0;i<=5;++i){ snprintf(tmp,sizeof(tmp),"%2d ",g->board[i]); strncat(bottom,tmp,sizeof(bottom)-strlen(bottom)-1); }
+    snprintf(out,out_sz,
+        "  +--------------------------------------\n"
+        "  |  %s |  <- Player 2 (pits 11..6)\n"
+        "P2 captures: %2d\n"
+        "  |--------------------------------------|\n"
+        "  |  %s |  <- Player 1 (pits 0..5)\n"
+        "P1 captures: %2d\n"
+        "  +--------------------------------------+\n"
+        "  Turn: Player %d | Phase: %s\n",
+        top,g->captured[1],bottom,g->captured[0],g->turn,g->phase==0?"playing":"finished");
+}
+
+
+
+static int simulate_move_board(const int in_board[12], int player, int pit, int out_board[12], int *last_pos) {
+    memcpy(out_board,in_board,12*sizeof(int));
+    if(pit<0||pit>11) return -1;
+    if(out_board[pit]==0) return -1;
+    int seeds=out_board[pit]; out_board[pit]=0; int pos=pit; int skip=pit;
+    while(seeds>0){ pos=(pos+1)%12; if(pos==skip) continue; out_board[pos]++; seeds--; }
+    if(last_pos) *last_pos=pos;
+    int captured_total=0;
+    if(is_opponent_pit(player,pos)&&(out_board[pos]==2||out_board[pos]==3)){
+        int i=pos;
+        while(is_opponent_pit(player,i)&&(out_board[i]==2||out_board[i]==3)){
+            captured_total+=out_board[i];
+            out_board[i]=0;
+            i=(i-1+12)%12;
+        }
+    }
+    return captured_total;
+}
+
+static int legal_moves(game_t *g,int player,int moves[6]) {
+    int start=pits_of_player_start(player),end=pits_of_player_end(player);
+    int cnt=0,nonstarving=0,temp[12];
+    for(int p=start;p<=end;++p){
+        if(g->board[p]==0) continue;
+        int lp,cap=simulate_move_board(g->board,player,p,temp,&lp);
+        if(cap<0) continue;
+        int oppsum=0;
+        for(int i=pits_of_player_start(3-player);i<=pits_of_player_end(3-player);++i) oppsum+=temp[i];
+        if(oppsum>0) moves[nonstarving++]=p;
+    }
+    if(nonstarving>0) return nonstarving;
+    for(int p=start;p<=end;++p) if(g->board[p]>0) moves[cnt++]=p;
+    return cnt;
+}
+
+static int apply_move(game_t *g,int player,int pit){
+    if(g->phase!=0||g->turn!=player) return -1;
+    if(pit<pits_of_player_start(player)||pit>pits_of_player_end(player)||g->board[pit]==0) return -1;
+    int moves[6],lm=legal_moves(g,player,moves),allowed=0;
+    for(int i=0;i<lm;++i) if(moves[i]==pit){allowed=1;break;}
+    if(!allowed) return -1;
+    int out_board[12],lp,cap=simulate_move_board(g->board,player,pit,out_board,&lp);
+    if(cap<0) return -1;
+    memcpy(g->board,out_board,12*sizeof(int));
+    g->captured[player-1]+=cap;
+    if(g->history_len<128){g->history[g->history_len].player=player;g->history[g->history_len].pit=pit;g->history[g->history_len].captured_amount=cap;g->history_len++;}
+    int p1=0,p2=0;for(int i=0;i<=5;++i)p1+=g->board[i];for(int i=6;i<=11;++i)p2+=g->board[i];
+    if(g->captured[0]>=25||g->captured[1]>=25){g->phase=1;return 0;}
+    if(p1==0||p2==0){g->captured[0]+=p1;g->captured[1]+=p2;for(int i=0;i<12;++i)g->board[i]=0;g->phase=1;return 0;}
+    if(p1+p2<8){g->captured[0]+=p1;g->captured[1]+=p2;for(int i=0;i<12;++i)g->board[i]=0;g->phase=1;return 0;}
+    g->turn=3-player;
+    return 0;
+}
+
+static int winner(game_t *g){
+    if(g->phase==0) return -1;
+    if(g->captured[0]>g->captured[1]) return 1;
+    if(g->captured[1]>g->captured[0]) return 2;
+    return 0;
+}
+
+/* --------------------------------------------------------- */
+
+
 static void init(void)
 {
 #ifdef WIN32
@@ -295,7 +391,7 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
    if(strstr(buffer, "list")){
       printf("sending player list\n");
       if(strstr(buffer, "players")){send_player_list(actual,sender,clients);}
-      if(strstr(buffer, "games")){send_game_list(sender);}
+      //if(strstr(buffer, "games")){send_game_list(sender);}
 
    }else if(strstr(buffer, "c")){
       printf("user wants to challenge ");
@@ -321,7 +417,7 @@ static void read_and_handle_message(Client *clients, Client * sender, int actual
    }
 }
 
-static void send_game_list(Client *sender){
+/*static void send_game_list(Client *sender){
    int i = 0;
    char message[BUF_SIZE];
    strcat(message, "matches that ore being played now:\n");
@@ -338,7 +434,7 @@ static void send_game_list(Client *sender){
    }
    write_client((*sender).sock, message);   
 
-}
+}*/
 
 static void spectate_match(Client * sender, const char *buffer){
    char _[20], nom1[20], nom2[20];
@@ -415,78 +511,69 @@ static void respond_to_challenge(Client * sender, Challenge ** challenges, const
 
 
 
-static void create_match(Challenge * challenge){
-   Match * match = malloc(sizeof(Match)); 
-   match->pair[0] = challenge->pair[0];
-   match->pair[1] = challenge->pair[1];
-   matches[match_actual] = match;
-   match_actual++;
+static void create_match(Challenge *challenge){
+    Match *match = malloc(sizeof(Match));
+    match->pair[0] = challenge->pair[0];
+    match->pair[1] = challenge->pair[1];
+    match->nb_spectators = 0;
+    init_game(&match->game);
+    matches[match_actual++] = match;
 
-
+    char board_buf[512];
+    ascii_board(&match->game, board_buf, sizeof(board_buf));
+    write_client(match->pair[0]->sock, board_buf);
+    write_client(match->pair[1]->sock, board_buf);
 }
 
-static void play_move(Client * sender, const char *buffer){
-   char _[20], nom[20], move[20];
-   sscanf(buffer, "%s %s %s", _, nom, move);
-   int index = 9;
-   fflush(stdout);
-   for(int i = 0; i<match_actual; ++i){
-      if(!strcmp((*sender).name, matches[i]->pair[0]->name) && !strcmp(nom, matches[i]->pair[1]->name)){
-         if(sender->state == -1 && matches[i]->pair[1]->state == -1){
+static void play_move(Client *sender, const char *buffer){
+    char cmd[20], opp[50];
+    int pit;
+    sscanf(buffer, "%s %s %d", cmd, opp, &pit);
+
+    for(int i=0;i<match_actual;++i){
+        Match *m = matches[i];
+        int player = 0;
+        if(!strcmp(sender->name, m->pair[0]->name) && !strcmp(opp, m->pair[1]->name)) player = 1;
+        else if(!strcmp(sender->name, m->pair[1]->name) && !strcmp(opp, m->pair[0]->name)) player = 2;
+        else continue;
+
+        if(m->game.phase != 0){
+            write_client(sender->sock,"Game already finished!\n");
             return;
-         }
-         else if(sender->state == -1 && matches[i]->pair[1]->state != -1){
-            char message[50];
-            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
-            write_client(matches[i]->pair[1]->sock, message);
+        }
+        if(m->game.turn != player){
+            write_client(sender->sock,"Not your turn!\n");
             return;
-         }
-         else if(sender->state != -1 && matches[i]->pair[1]->state == -1){
-            char message[50];
-            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
-            write_client(sender->sock, message);
+        }
+        if(apply_move(&m->game,player,pit)==-1){
+            write_client(sender->sock,"Invalid move.\n");
             return;
-         }
+        }
 
-         strcpy(matches[i]->grid, move); ///to change
-         send_game_update(sender, i, move, nom,1);
+        char board_buf[512];
+        ascii_board(&m->game, board_buf, sizeof(board_buf));
+        write_client(m->pair[0]->sock, board_buf);
+        write_client(m->pair[1]->sock, board_buf);
+        for(int s=0;s<m->nb_spectators;s++)
+            write_client(m->spectators[s]->sock, board_buf);
 
-
-         return;
-         
-      }else if(!strcmp((*sender).name, matches[i]->pair[1]->name) && !strcmp(nom, matches[i]->pair[0]->name)){
-         if(sender->state == -1 && matches[i]->pair[0]->state == -1){
-            return;
-         }
-         else if(sender->state == -1 && matches[i]->pair[0]->state != -1){
-            char message[50];
-            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
-            write_client(matches[i]->pair[1]->sock, message);
-            return;
-         }
-         else if(sender->state != -1 && matches[i]->pair[0]->state == -1){
-            char message[50];
-            snprintf(message, sizeof(message), "player %s is disconnected, wait till he reconnects",matches[i]->pair[1]->name);
-            write_client(sender->sock, message);
-            return;
-         }
-         strcpy(matches[i]->grid, move); ///to change
-         send_game_update(sender, i, move, nom,0);
-         return;
-         
-
-      }
-   }
-
-   
-   write_client((*sender).sock, "no match found with thi user name\n");
-
-
-
+        if(m->game.phase==1){
+            int w=winner(&m->game);
+            char msg[128];
+            if(w==0) snprintf(msg,sizeof(msg),"Game ended in a draw!\n");
+            else snprintf(msg,sizeof(msg),"Player %d wins!\n",w);
+            write_client(m->pair[0]->sock,msg);
+            write_client(m->pair[1]->sock,msg);
+            for(int s=0;s<m->nb_spectators;s++)
+                write_client(m->spectators[s]->sock,msg);
+        }
+        return;
+    }
+    write_client(sender->sock,"No active match found.\n");
 }
 
 
-static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
+/*static void send_game_update(Client * sender, int i, char * move, char* nom, int index){
    char message[100];      
    snprintf(message, sizeof(message), "move played in match with %s is: %s\n",(*sender).name, move);
    write_client(matches[i]->pair[index]->sock, message);
@@ -504,7 +591,7 @@ static void send_game_update(Client * sender, int i, char * move, char* nom, int
 
    return;
 
-}
+}*/
 
 
 
