@@ -3,8 +3,6 @@
 
 #include "server.h"
 
-
-
 typedef struct
 {
    SOCKET sock;
@@ -12,6 +10,7 @@ typedef struct
    char pswd[BUF_SIZE];
    int state;
    int first_connexion; //-1 not responded    0 no         1 yes
-}Client;
+   char bio[500];
+} Client;
 
 #endif /* guard */

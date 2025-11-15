@@ -1,14 +1,12 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h> /* close */
-#include <netdb.h> /* gethostbyname */
+#include <netdb.h>  /* gethostbyname */
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
 #define closesocket(s) close(s)
@@ -17,23 +15,22 @@ typedef struct sockaddr_in SOCKADDR_IN;
 typedef struct sockaddr SOCKADDR;
 typedef struct in_addr IN_ADDR;
 
+#define CRLF "\r\n"
+#define PORT 9999
+#define MAX_CLIENTS 100
 
-
-
-#define CRLF        "\r\n"
-#define PORT         9999
-#define MAX_CLIENTS     100
-
-#define BUF_SIZE    1024
+#define BUF_SIZE 1024
 
 #include "client.h"
 
-typedef struct {
+typedef struct
+{
     int board[12];
     int captured[2];
-    int turn;   // 1 or 2
-    int phase;  // 0 = playing, 1 = finished
-    struct {
+    int turn;  // 1 or 2
+    int phase; // 0 = playing, 1 = finished
+    struct
+    {
         int player;
         int pit;
         int captured_amount;
@@ -41,21 +38,28 @@ typedef struct {
     int history_len;
 } game_t;
 
-#define pits_of_player_start(p) ((p)==1?0:6)
-#define pits_of_player_end(p)   ((p)==1?5:11)
-#define is_opponent_pit(pit_player, pit) ((pit_player)==1?((pit)>=6 && (pit)<=11):((pit)>=0 && (pit)<=5))
+#define pits_of_player_start(p) ((p) == 1 ? 0 : 6)
+#define pits_of_player_end(p) ((p) == 1 ? 5 : 11)
+#define is_opponent_pit(pit_player, pit) ((pit_player) == 1 ? ((pit) >= 6 && (pit) <= 11) : ((pit) >= 0 && (pit) <= 5))
 
-typedef struct {
-    Client * pair[2];
-    Client * spectators[5];
+typedef struct
+{
+    Client *pair[2];
+    Client *spectators[5];
     int nb_spectators;
-    game_t game;   
+    game_t game;
+    Client *allowed_spectators[5];
+    int nb_allowed_spectators;
+
 } Match;
 
-typedef struct {Client * pair[2]} Challenge;
+typedef struct
+{
+    Client *pair[2];
+    Client *allowed_spectators[5];
+    int nb_allowed_spectators;
 
-
-
+} Challenge;
 
 static void init(void);
 static void end(void);
@@ -64,18 +68,22 @@ static int init_connection(void);
 static void end_connection(int sock);
 static int read_client(SOCKET sock, char *buffer);
 static void write_client(SOCKET sock, const char *buffer);
-static void send_message_to_all_clients(Client *clients, Client * client, int actual, const char *buffer, char from_server);
+static void send_message_to_all_clients(Client *clients, Client *client, int actual, const char *buffer, char from_server);
 static void remove_client(Client *clients, int to_remove, int *actual);
 static void clear_clients(Client *clients, int actual);
 
-static void read_and_handle_message(Client *clients, Client * client, int actual, const char *buffer, char from_server,Challenge * challenges);
-static void send_player_list(int actual,Client *sender,Client *clients);
-static void challenge(Client *sender, Client *clients, int actual, char* name,Challenge ** challenges,const char * buffer);
-static void respond_to_challenge(Client *sender, Challenge ** challenges, const char * buffer);
-static void create_match(Challenge * challenge);
+static void read_and_handle_message(Client *clients, Client *client, int actual, const char *buffer, char from_server, Challenge *challenges);
+static void send_player_list(int actual, Client *sender, Client *clients);
+static void challenge(Client *sender, Client *clients, int actual, Challenge **challenges, const char *buffer, int private_game);
+static void respond_to_challenge(Client *sender, Challenge **challenges, const char *buffer);
+static void create_match(Challenge *challenge);
 static void play_move(Client *sender, const char *buffer);
 static void spectate_match(Client *sender, const char *buffer);
 static void send_game_list(Client *sender);
-static void send_game_update(Client * sender, int i, char * move, char* nom, int index);
-static void find_client_by_name(Client * clients, const char * buffer, int actual,Client *);
+static void send_game_update(Client *sender, int i, char *move, char *nom, int index);
+static void find_client_by_name(Client *clients, const char *buffer, int actual, Client *);
+static void update_bio(Client *cleints, Client *sender, int actual, const char *buffer);
+static void show_bio(Client *clients, Client *sender, int actual, const char *buffer);
+static void remove_challenge(Challenge *challenges[], int index, int *count);
+static void send_message_to_client(Client *clients, Client *sender, int actual, const char *buffer);
 #endif /* guard */
